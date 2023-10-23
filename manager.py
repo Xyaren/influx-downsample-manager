@@ -13,7 +13,7 @@ from influxdb_client import Bucket, BucketRetentionRules, BucketsService, Influx
 from influxdb_client.client.flux_table import TableList
 from pytimeparse.timeparse import timeparse
 
-coloredlogs.install(stream = sys.stdout)  # install a handler on the root logger
+coloredlogs.install(stream=sys.stdout)  # install a handler on the root logger
 
 logger = logging.getLogger(__name__)  # get a specific logger object
 
@@ -30,35 +30,41 @@ bucket_configs = {
     "1w": {
         "expires": "1w",
         "interval": "1m",
+        "every": "15m",
+        "offset": "30s"
     },
     "31d": {
         "expires": "31d",
         "interval": "10m",
+        "every": "1h",
+        "offset": "1m"
     },
     "inf": {
         "interval": "1h",
+        "every": "1d",
+        "offset": "5m"
     }
 }
 
 # Define the InfluxDB client
-client = InfluxDBClient(url = "http://xyaren.de:8086", token = token)
-organization: Organization = client.organizations_api().find_organizations(org = org)[0]
+client = InfluxDBClient(url="http://xyaren.de:8086", token=token)
+organization: Organization = client.organizations_api().find_organizations(org=org)[0]
 
 
-@dataclass(unsafe_hash = True)
+@dataclass(unsafe_hash=True)
 class FieldData:
     data_type: str
     numeric: bool
 
 
-@dataclass(unsafe_hash = True)
+@dataclass(unsafe_hash=True)
 class LabelDef:
     name: str
     description: str
     color: str
 
 
-LABEL_DOWNSAMPLING = LabelDef(name = "Downsampling", description = "Downsampling", color = "#ffff00")
+LABEL_DOWNSAMPLING = LabelDef(name="Downsampling", description="Downsampling", color="#ffff00")
 
 Mapping = dict[str, dict[str, FieldData]]
 
@@ -67,12 +73,12 @@ tasks_service = TasksService(client.api_client)
 
 
 def create_or_get_label(label: LabelDef):
-    existing_labels = client.labels_api().find_label_by_org(org_id = organization.id)
+    existing_labels = client.labels_api().find_label_by_org(org_id=organization.id)
     matching_labels = [x for x in existing_labels if x.name == label.name]
     existing: Label | None = matching_labels[0] if len(matching_labels) == 1 else None
 
     if existing is None:
-        created_label = client.labels_api().create_label(name = label.name, org_id = organization.id, properties = {
+        created_label = client.labels_api().create_label(name=label.name, org_id=organization.id, properties={
             "color": label.color,
             "description": label.description,
             "creator": "influx-downsample-manager"})
@@ -94,17 +100,17 @@ def create_bucket(bucket_name: str, expires: str):
         every_seconds = timeparse(expires)
         if every_seconds is None:
             raise Exception("Can't parse " + expires)
-        rules = [BucketRetentionRules(type = 'expire', every_seconds = every_seconds)]
+        rules = [BucketRetentionRules(type='expire', every_seconds=every_seconds)]
 
-    bucket: Bucket | None = client.buckets_api().find_bucket_by_name(bucket_name = bucket_name)
+    bucket: Bucket | None = client.buckets_api().find_bucket_by_name(bucket_name=bucket_name)
 
     if bucket is not None:
         bucket.retention_rules = rules
         return client.buckets_api().update_bucket(bucket)
     else:
-        bucket = Bucket(name = bucket_name,
-                        retention_rules = rules,
-                        org_id = organization.id)
+        bucket = Bucket(name=bucket_name,
+                        retention_rules=rules,
+                        org_id=organization.id)
         return client.buckets_api().create_bucket(bucket)
 
 
@@ -144,7 +150,7 @@ def get_measurements_and_fields(bucket: str) -> Mapping:
         |> drop(columns: ["_value"])
         |> group(columns: ["_measurement"])
     """
-    result: TableList = client.query_api().query(query = flux, org = organization)
+    result: TableList = client.query_api().query(query=flux, org=organization)
     results: dict[str, dict[str, FieldData]] = {}
     for table in result:
         measurement = table.records[0].get_measurement()
@@ -153,7 +159,7 @@ def get_measurements_and_fields(bucket: str) -> Mapping:
             field = record.get_field()
             numeric = record["numeric"]
             data_type = record["type"]
-            fields[field] = FieldData(data_type = data_type, numeric = numeric)
+            fields[field] = FieldData(data_type=data_type, numeric=numeric)
         results[measurement] = fields
     return results
 
@@ -168,18 +174,18 @@ def cleanup_labels(created_label_ids):
 
 
 def cleanup_tasks(created_tasks):
-    tasks: list[Task] = client.tasks_api().find_tasks(org_id = organization.id)
+    tasks: list[Task] = client.tasks_api().find_tasks(org_id=organization.id)
     for task in tasks:
         if task.name.startswith(task_prefix) and task.id not in created_tasks:
-            client.tasks_api().delete_task(task_id = task.id)
+            client.tasks_api().delete_task(task_id=task.id)
             logger.info("Deleted Task: %s", task.name)
 
 
 def process(label_downsampling: Label, source_bucket: str, created_tasks: Set[str], created_label_ids: Set[str]):
     source_label = create_or_get_label(
-        LabelDef(name = "Source: " + source_bucket,
-                 description = "Source: " + source_bucket,
-                 color = "#383e42"))
+        LabelDef(name="Source: " + source_bucket,
+                 description="Source: " + source_bucket,
+                 color="#383e42"))
     created_label_ids.add(source_label.id)
 
     bucket_to_generators: dict[str, list[QueryGenerator]] = {}
@@ -189,12 +195,14 @@ def process(label_downsampling: Label, source_bucket: str, created_tasks: Set[st
         downsample_bucket_name = source_bucket + "_" + suffix
 
         target_bucket_label = create_or_get_label(
-            LabelDef(name = "Bucket: " + downsample_bucket_name,
-                     description = "Bucket: " + downsample_bucket_name,
-                     color = "#ADFF2F"))
+            LabelDef(name="Bucket: " + downsample_bucket_name,
+                     description="Bucket: " + downsample_bucket_name,
+                     color="#ADFF2F"))
         created_label_ids.add(target_bucket_label.id)
 
         interval = bucket_config['interval']
+        every = bucket_config['every']
+        offset = bucket_config['offset']
 
         expires = bucket_config['expires'] if 'expires' in bucket_config else None
         bucket = create_bucket(downsample_bucket_name, expires)
@@ -203,21 +211,22 @@ def process(label_downsampling: Label, source_bucket: str, created_tasks: Set[st
         add_label_to_bucket(bucket, source_label)
 
         interval_label = create_or_get_label(
-            LabelDef(name = "Interval: " + interval, description = "Interval: " + interval, color = "#800080"))
+            LabelDef(name="Interval: " + interval, description="Interval: " + interval, color="#800080"))
         created_label_ids.add(interval_label.id)
         add_label_to_bucket(bucket, interval_label)
 
         expiry_label = create_or_get_label(
-            LabelDef(name = "Retention: " + (expires or "Infinity"),
-                     description = "Retention: " + (expires or "Infinity"),
-                     color = "#d22b2b"))
+            LabelDef(name="Retention: " + (expires or "Infinity"),
+                     description="Retention: " + (expires or "Infinity"),
+                     color="#d22b2b"))
         created_label_ids.add(expiry_label.id)
         add_label_to_bucket(bucket, expiry_label)
 
         mapping: Mapping = get_measurements_and_fields(source_bucket)
 
         labels = [source_label, target_bucket_label, interval_label, source_label, label_downsampling]
-        generators = create_tasks(source_bucket, downsample_bucket_name, interval, expires, mapping, created_tasks,
+        generators = create_tasks(source_bucket, downsample_bucket_name, interval, expires, every, offset, mapping,
+                                  created_tasks,
                                   created_label_ids, labels)
 
         bucket_to_generators[downsample_bucket_name] = generators
@@ -230,12 +239,16 @@ class QueryGenerator:
                  target_bucket: str,
                  interval: str,
                  expires: str,
+                 every: str,
+                 offset: str,
                  measurement: str,
                  fields: dict[str, FieldData]):
         self.source_bucket = source_bucket
         self.target_bucket = target_bucket
         self.interval = interval
         self.expires = expires
+        self.every = every
+        self.offset = offset
         self.measurement = measurement
         self.fields = fields
 
@@ -284,7 +297,7 @@ class QueryGenerator:
             flux_queries.append(flux_query)
 
         # Define the task properties and create the task
-        task_def = f'option task = {{name: "{self.task_name()}", every: {self.interval}, offset: 30s}}\n\n'
+        task_def = f'option task = {{name: "{self.task_name()}", every: {self.every}, offset: {self.offset}}}\n\n'
         return imports + task_def + prep + "\n\n".join(flux_queries)
 
     def generate_query(self, start: str, stop: str):
@@ -332,12 +345,14 @@ class QueryGenerator:
         return f"{self.source_bucket} -> {self.target_bucket}: {self.measurement}"
 
 
-def create_tasks(source_bucket, target_bucket, interval, expires, mapping, created_tasks, created_label_ids, labels):
+def create_tasks(source_bucket, target_bucket, interval, expires, every, offset, mapping, created_tasks,
+                 created_label_ids,
+                 labels):
     generators = []
     # Loop through each measurement and add it to the Flux query with the appropriate aggregation function
     for measurement, fields in mapping.items():
 
-        generator = QueryGenerator(source_bucket, target_bucket, interval, expires, measurement, fields)
+        generator = QueryGenerator(source_bucket, target_bucket, interval, expires, every, offset, measurement, fields)
         generators.append(generator)
 
         task = create_or_update_tasks(created_tasks, generator.generate_task(), generator.task_name())
@@ -345,7 +360,7 @@ def create_tasks(source_bucket, target_bucket, interval, expires, mapping, creat
             add_label_to_task(task, label)
 
         measurement_label = create_or_get_label(
-            LabelDef("Measurement: " + measurement, "Measurement: " + measurement, color = "#008080"))
+            LabelDef("Measurement: " + measurement, "Measurement: " + measurement, color="#008080"))
         created_label_ids.add(measurement_label.id)
         add_label_to_task(task, measurement_label)
 
@@ -353,7 +368,7 @@ def create_tasks(source_bucket, target_bucket, interval, expires, mapping, creat
 
 
 def create_or_update_tasks(created_tasks, flux_query, task_name):
-    existing: list[Task] = client.tasks_api().find_tasks(org_id = organization.id, name = task_name)
+    existing: list[Task] = client.tasks_api().find_tasks(org_id=organization.id, name=task_name)
     if len(existing) == 1:
         _existing_task = existing[0]
 
@@ -363,24 +378,24 @@ def create_or_update_tasks(created_tasks, flux_query, task_name):
             return _existing_task
 
         updated_task = client.tasks_api().update_task_request(
-            _existing_task.id, task_update_request = TaskUpdateRequest(flux = flux_query))
+            _existing_task.id, task_update_request=TaskUpdateRequest(flux=flux_query))
         created_tasks.add(updated_task.id)
         logger.info("Updated Task: %s", updated_task.name)
         return updated_task
     else:
         create_task = client.tasks_api().create_task(
-            task_create_request = (TaskCreateRequest(org_id = organization.id, flux = flux_query)))
+            task_create_request=(TaskCreateRequest(org_id=organization.id, flux=flux_query)))
         created_tasks.add(create_task.id)
         logger.info("Created Task: %s", create_task.name)
         return create_task
 
 
 def post_import(bucket_to_generators: dict[str, dict[str, list[QueryGenerator]]]):
-    interval = datetime.timedelta(hours = 2)
-    empty_query_result_limit = datetime.timedelta(days = 1) / interval
+    interval = datetime.timedelta(hours=2)
+    empty_query_result_limit = datetime.timedelta(days=1) / interval
 
-    latest_stop = datetime.datetime.now(tz = datetime.timezone.utc).replace(microsecond = 0, second = 0, minute = 0) \
-                  + datetime.timedelta(hours = 1)
+    latest_stop = datetime.datetime.now(tz=datetime.timezone.utc).replace(microsecond=0, second=0, minute=0) \
+                  + datetime.timedelta(hours=1)
 
     for source_bucket, collected_generators in bucket_to_generators.items():
         for target_bucket, generators in collected_generators.items():
@@ -391,8 +406,8 @@ def post_import(bucket_to_generators: dict[str, dict[str, list[QueryGenerator]]]
 
                 earliest_start = None
                 if generator.expires is not None:
-                    earliest_start = datetime.datetime.now(tz = datetime.timezone.utc) - \
-                                     datetime.timedelta(seconds = timeparse(generator.expires))
+                    earliest_start = datetime.datetime.now(tz=datetime.timezone.utc) - \
+                                     datetime.timedelta(seconds=timeparse(generator.expires))
 
                 while empty_query_result_count < empty_query_result_limit:
                     start = (stop - interval)
@@ -402,7 +417,7 @@ def post_import(bucket_to_generators: dict[str, dict[str, list[QueryGenerator]]]
                     logger.info("Query %s/%s/%s/%s-%s",
                                 source_bucket, target_bucket, generator.measurement, start, stop)
                     query = generator.generate_query(start.isoformat(), stop.isoformat())
-                    query_result = client.query_api().query(query = query, org = organization.id)
+                    query_result = client.query_api().query(query=query, org=organization.id)
                     stop = stop - interval
                     if len(query_result) == 0:
                         empty_query_result_count = empty_query_result_count + 1
@@ -423,7 +438,7 @@ def main():
     cleanup_tasks(created_tasks)
     cleanup_labels(created_label_ids)
 
-    post_import(bucket_to_generators)
+    # post_import(bucket_to_generators)
 
     logger.info("Done")
 
