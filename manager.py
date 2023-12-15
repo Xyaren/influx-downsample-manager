@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)  # get a specific logger object
 org = "example.com"
 token = "REDACTED_TOKEN=="
 
-buckets = ["telegraf/autogen", "teamspeak"]
+buckets = ["telegraf/autogen", "teamspeak", "crowdsec"]
 # buckets = ["teamspeak"]
 # buckets = []
 task_prefix = "gen_"
