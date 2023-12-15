@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)  # get a specific logger object
 org = "xyaren.de"
 token = "xwmXnAzinVwIM_BSI1sPefKjanesZ-bTfCTjzEYK1_byTDCLXiDyEiDfucKx46WqohjOxipck-94vbkkPAJTeg=="
 
-buckets = ["telegraf/autogen", "teamspeak"]
+buckets = ["telegraf/autogen", "teamspeak", "crowdsec"]
 # buckets = ["teamspeak"]
 # buckets = []
 task_prefix = "gen_"
