@@ -3,35 +3,49 @@ import json
 
 from pytimeparse.timeparse import timeparse
 
-from influx_duration import timedelta_to_flux_duration
-from manager import FieldData, task_prefix
-from utils import hash_to_decimal
+from .model import FieldData, DownsampleConfiguration
+from .utils import hash_to_decimal, timedelta_to_flux_duration, hash_to_integer
 
 
 class QueryGenerator:
     def __init__(self,
                  source_bucket: str,
                  target_bucket: str,
-                 interval: str,
-                 expires: str,
-                 every: str,
-                 offset: str,
+                 downsample_config: DownsampleConfiguration,
                  measurement: str,
-                 fields: dict[str, FieldData]):
+                 fields: dict[str, FieldData],
+                 task_prefix: str = "gen_"):
+        self.task_prefix = task_prefix
         self.source_bucket = source_bucket
         self.target_bucket = target_bucket
-        self.interval = interval
-        self.expires = expires
-        self.every = every
-        self.offset = offset
+        self.downsample_config = downsample_config
         self.measurement = measurement
         self.fields = fields
+
+        self.interval = self.downsample_config["interval"]
+        self.every = self.downsample_config["every"]
+        self.expires = self.downsample_config["expires"] if "expires" in downsample_config else None
 
         self.numeric_fields = [k for k, v in fields.items() if v.numeric]
         self.non_numeric_fields = [k for k, v in fields.items() if v.numeric is False]
 
     def task_name(self):
-        return f"{task_prefix}{self.target_bucket}_{self.measurement}"
+        return f"{self.task_prefix}{self.target_bucket}_{self.measurement}"
+
+    def offset_with_predictable_factor(self) -> datetime.timedelta:
+        """
+        Prevent all tasks from running at the exact same time. Dynamic offset should spread the load.
+        """
+        min_offset = timeparse(self.downsample_config["offset"])
+        if "max_offset" not in self.downsample_config:
+            return datetime.timedelta(seconds=min_offset)
+
+        max_offset = timeparse(self.downsample_config["max_offset"] or min_offset)
+        if min_offset == max_offset:
+            return datetime.timedelta(seconds=min_offset)
+
+        seconds = hash_to_integer(self.task_name(), min_offset, max_offset)
+        return datetime.timedelta(seconds=seconds)
 
     def generate_task(self):
         imports = (
@@ -75,15 +89,6 @@ class QueryGenerator:
         offset_as_influx_duration = timedelta_to_flux_duration(self.offset_with_predictable_factor())
         task_def = f'option task = {{name: "{self.task_name()}", every: {self.every}, offset: {offset_as_influx_duration}}}\n\n'
         return imports + task_def + prep + "\n\n".join(flux_queries)
-
-    def offset_with_predictable_factor(self):
-        """
-        Prevent all tasks from running at the exact same time. Dynamic offset should spread the load.
-        """
-        parsed_offset = timeparse(self.offset)
-        decimal = hash_to_decimal(self.task_name(), 1.0, 2.0)
-        new_offset = datetime.timedelta(seconds=parsed_offset) * round(decimal, 2)
-        return new_offset
 
     def generate_query(self, start: str, stop: str):
         imports = (
