@@ -11,7 +11,7 @@ coloredlogs.install(stream=sys.stdout)  # install a handler on the root logger
 logger = logging.getLogger(__name__)  # get a specific logger object
 
 if __name__ == '__main__':
-    buckets = ["telegraf/autogen", "teamspeak", "crowdsec"]
+    buckets = ["telegraf/autogen", "teamspeak", "crowdsec", "api"]
 
     # Define the bucket and downsampling configurations for each time range and resolution
     bucket_configs: dict[str, DownsampleConfiguration] = {
