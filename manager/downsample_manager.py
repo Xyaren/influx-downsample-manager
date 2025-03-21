@@ -31,14 +31,14 @@ class DownsampleManager:
                  buckets: Set[str],
                  bucket_configs: dict[str, DownsampleConfiguration],
                  url: str,
-                 metric_detection_duration: str = "1h"):
+                 metric_detection_duration: str = "7d"):
         self._metric_detection_duration = metric_detection_duration
         self._buckets = buckets
         self._bucket_configs = bucket_configs
 
         self._task_prefix = "gen_"
 
-        self._client = InfluxDBClient(url=url, token=token)
+        self._client = InfluxDBClient(url=url, token=token, timeout=datetime.timedelta(minutes=1).microseconds / 1000)
         self._organization: Organization = self._client.organizations_api().find_organizations(org=org)[0]
 
         self._buckets_service = BucketsService(self._client.api_client)
