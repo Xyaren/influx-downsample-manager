@@ -1,6 +1,6 @@
 import datetime
 import logging
-from typing import Set
+from typing import Set, List
 
 from influxdb_client.client.flux_table import TableList
 from influxdb_client.client.influxdb_client import InfluxDBClient
@@ -31,7 +31,7 @@ class DownsampleManager:
                  buckets: Set[str],
                  bucket_configs: dict[str, DownsampleConfiguration],
                  url: str,
-                 metric_detection_duration: str = "7d"):
+                 metric_detection_duration: str = "1d"):
         self._metric_detection_duration = metric_detection_duration
         self._buckets = buckets
         self._bucket_configs = bucket_configs
@@ -67,13 +67,20 @@ class DownsampleManager:
             else:
                 raise Exception("Label " + label.name + " exists, but is not managed by this script")
 
-    def create_bucket(self, bucket_name: str, expires: str):
+    def create_bucket(self, bucket_name: str, expires: str, bucket_shard_group_interval: str):
         rules = []
         if expires is not None:
             every_seconds = timeparse(expires)
             if every_seconds is None:
                 raise Exception("Can't parse " + expires)
-            rules = [BucketRetentionRules(type='expire', every_seconds=every_seconds)]
+
+            shard_group_duration_seconds = None
+            if bucket_shard_group_interval is not None:
+                shard_group_duration_seconds = timeparse(bucket_shard_group_interval)
+                if shard_group_duration_seconds is None:
+                    raise Exception("Can't parse " + expires)
+            rules = [BucketRetentionRules(type='expire', every_seconds=every_seconds,
+                                          shard_group_duration_seconds=shard_group_duration_seconds)]
 
         bucket: Bucket | None = self._client.buckets_api().find_bucket_by_name(bucket_name=bucket_name)
 
@@ -141,12 +148,13 @@ class DownsampleManager:
                     self._client.labels_api().delete_label(label)
                     logger.info("Deleted Label: %s", label.name)
 
-    def cleanup_tasks(self, created_tasks):
-        tasks: list[Task] = self._client.tasks_api().find_tasks(org_id=self._organization.id)
+    def cleanup_tasks(self, label_downsampling: Label, created_tasks: Set[str]):
+        tasks: list[Task] = list(self._client.tasks_api().find_tasks_iter(org_id=self._organization.id))
         for task in tasks:
-            if task.name.startswith(self._task_prefix) and task.id not in created_tasks:
-                self._client.tasks_api().delete_task(task_id=task.id)
-                logger.info("Deleted Task: %s", task.name)
+            if label_downsampling in task.labels:
+                if task.name.startswith(self._task_prefix) and task.id not in created_tasks:
+                    self._client.tasks_api().delete_task(task_id=task.id)
+                    logger.info("Deleted Task: %s", task.name)
 
     def process(self, label_downsampling: Label, source_bucket: str, created_tasks: Set[str],
                 created_label_ids: Set[str]):
@@ -170,7 +178,7 @@ class DownsampleManager:
 
             interval = bucket_config['interval']
             expires = bucket_config['expires'] if 'expires' in bucket_config else None
-            bucket = self.create_bucket(downsample_bucket_name, expires)
+            bucket = self.create_bucket(downsample_bucket_name, expires, bucket_config['bucket_shard_group_interval'])
             self.add_label_to_bucket(bucket, target_bucket_label)
             self.add_label_to_bucket(bucket, label_downsampling)
             self.add_label_to_bucket(bucket, source_label)
@@ -289,7 +297,7 @@ class DownsampleManager:
             bucket_queries = self.process(label_downsampling, source_bucket, created_tasks, created_label_ids)
             bucket_to_generators[source_bucket] = bucket_queries
 
-        self.cleanup_tasks(created_tasks)
+        self.cleanup_tasks(label_downsampling, created_tasks)
         self.cleanup_labels(created_label_ids)
 
         # self.post_import(bucket_to_generators)

@@ -15,9 +15,9 @@ if __name__ == '__main__':
 
     # Define the bucket and downsampling configurations for each time range and resolution
     bucket_configs: dict[str, DownsampleConfiguration] = {
-        "1w": DownsampleConfiguration(interval="1m", every="15m", offset="30s", max_offset="5m", expires="1w"),
-        "31d": DownsampleConfiguration(interval="10m", every="1h", offset="1m", max_offset="30m", expires="31d"),
-        "inf": DownsampleConfiguration(interval="1h", every="1d", offset="5m", max_offset="1h")
+        "1w": DownsampleConfiguration(bucket_shard_group_interval="1d", interval="1m", every="15m", offset="30s", max_offset="5m", expires="1w"),
+        "31d": DownsampleConfiguration(bucket_shard_group_interval="3d", interval="10m", every="1h", offset="1m", max_offset="30m", expires="31d"),
+        "inf": DownsampleConfiguration(bucket_shard_group_interval="30d", interval="1h", every="1d", offset="5m", max_offset="1h")
     }
 
     # Define the InfluxDB client
@@ -26,7 +26,8 @@ if __name__ == '__main__':
         "REDACTED_TOKEN==",
         buckets,
         bucket_configs,
-        "http://example.com:8086"
+        "https://influxdb.example.com",
+        "1d"
     )
 
     manager.run()
