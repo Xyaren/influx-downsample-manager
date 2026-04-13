@@ -176,6 +176,10 @@ docker run --rm \
 └── Dockerfile                     # Container build
 ```
 
+## AI Disclaimer
+
+Portions of this codebase were developed with the assistance of AI tools. All AI-generated code has been reviewed and approved by the project maintainer.
+
 ## License
 
 This project is licensed under the [GNU General Public License v3.0](LICENSE).
