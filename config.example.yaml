@@ -1,0 +1,42 @@
+## InfluxDB Downsampling Manager Configuration
+## Copy this file and fill in your values, or override via environment variables.
+
+# InfluxDB connection
+influxdb:
+  org: "my-org"
+  url: "https://influxdb.example.com"
+  # token can also be set via INFLUXDB_TOKEN environment variable
+  token: ""
+
+# Source buckets to downsample
+source_buckets:
+  - "telegraf/autogen"
+  - "teamspeak"
+  - "crowdsec"
+  - "api"
+
+# Duration to look back when detecting measurements/fields
+metric_detection_duration: "1d"
+
+# Downsampling configurations keyed by target suffix
+downsample_configs:
+  "1w":
+    bucket_shard_group_interval: "1d"
+    interval: "1m"
+    every: "15m"
+    offset: "30s"
+    max_offset: "5m"
+    expires: "1w"
+  "31d":
+    bucket_shard_group_interval: "3d"
+    interval: "10m"
+    every: "1h"
+    offset: "1m"
+    max_offset: "30m"
+    expires: "31d"
+  "inf":
+    bucket_shard_group_interval: "30d"
+    interval: "1h"
+    every: "1d"
+    offset: "5m"
+    max_offset: "1h"

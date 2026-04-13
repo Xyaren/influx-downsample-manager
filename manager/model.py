@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing_extensions import TypedDict, NotRequired
+from typing import NotRequired, TypedDict
 
 
 @dataclass(unsafe_hash=True)
@@ -22,7 +22,6 @@ class DownsampleConfiguration(TypedDict):
     max_offset: NotRequired[str]
     expires: NotRequired[str]
     bucket_shard_group_interval: NotRequired[str]
-
 
 
 Mapping = dict[str, dict[str, FieldData]]
