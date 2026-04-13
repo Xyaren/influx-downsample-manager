@@ -6,3 +6,4 @@ __pycache__/
 # Never commit real config with tokens
 config.yaml
 !config.example.yaml
+.kiro/settings/mcp.json
