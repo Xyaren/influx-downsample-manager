@@ -176,6 +176,10 @@ docker run --rm \
 └── Dockerfile                     # Container build
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. Commits that include AI-assisted code must include a `Co-authored-by` trailer identifying the AI tool used.
+
 ## AI Disclaimer
 
 Portions of this codebase were developed with the assistance of AI tools. All AI-generated code has been reviewed and approved by the project maintainer.
