@@ -18,7 +18,7 @@ from influxdb_client.service.tasks_service import TasksService
 from pytimeparse.timeparse import timeparse
 
 from .model import FieldData, LabelDef, Mapping, DownsampleConfiguration
-from .query_generator import QueryGenerator
+from .query_generator import BaseQueryGenerator, SourceQueryGenerator, ChainedQueryGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +174,17 @@ class DownsampleManager:
                     self._client.tasks_api().delete_task(task_id=task.id)
                     logger.info("Deleted Task: %s", task.name)
 
+    @staticmethod
+    def _sorted_bucket_configs(bucket_configs: dict[str, DownsampleConfiguration]) -> list[tuple[str, DownsampleConfiguration]]:
+        """Sort bucket configs by interval duration (ascending) so chaining reads from the finest granularity first."""
+        def _interval_seconds(cfg: DownsampleConfiguration) -> int:
+            parsed = timeparse(cfg["interval"])
+            if parsed is None:
+                raise Exception(f"Can't parse interval: {cfg['interval']}")
+            return parsed
+
+        return sorted(bucket_configs.items(), key=lambda item: _interval_seconds(item[1]))
+
     def process(self, label_downsampling: Label, source_bucket: str, created_tasks: set[str],
                 created_label_ids: set[str]):
         source_label = self.create_or_get_label(
@@ -182,11 +193,25 @@ class DownsampleManager:
                      color="#383e42"))
         created_label_ids.add(source_label.id)
 
-        bucket_to_generators: dict[str, list[QueryGenerator]] = {}
+        bucket_to_generators: dict[str, list[BaseQueryGenerator]] = {}
+        # Sort configs by interval so chaining always reads from the next-finer tier
+        sorted_configs = self._sorted_bucket_configs(self._bucket_configs)
 
-        # Loop through each bucket configuration and create a task for each downsampling configuration
-        for suffix, bucket_config in self._bucket_configs.items():
+        # Track the previous tier for chaining
+        prev_bucket_name: str | None = None
+
+        # Loop through each bucket configuration (finest interval first)
+        for i, (suffix, bucket_config) in enumerate(sorted_configs):
             downsample_bucket_name = source_bucket + "_" + suffix
+            chained = bucket_config.get("chained", False)
+
+            # Determine which bucket this tier reads from
+            if chained and prev_bucket_name is not None:
+                effective_source = prev_bucket_name
+                logger.info("Chaining: %s reads from %s (instead of %s)",
+                            downsample_bucket_name, effective_source, source_bucket)
+            else:
+                effective_source = source_bucket
 
             target_bucket_label = self.create_or_get_label(
                 LabelDef(name="Bucket: " + downsample_bucket_name,
@@ -213,29 +238,34 @@ class DownsampleManager:
             created_label_ids.add(expiry_label.id)
             self.add_label_to_bucket(bucket, expiry_label)
 
+            # Detect measurements from the original source bucket (always has the full schema)
             mapping: Mapping = self.get_measurements_and_fields(source_bucket)
 
             labels = [source_label, target_bucket_label, interval_label, label_downsampling]
-            generators = self.create_tasks(source_bucket,
+            generators = self.create_tasks(effective_source,
                                            downsample_bucket_name,
                                            bucket_config,
                                            mapping,
                                            created_tasks,
-                                           created_label_ids, labels)
+                                           created_label_ids, labels,
+                                           chained=chained)
 
             bucket_to_generators[downsample_bucket_name] = generators
+            prev_bucket_name = downsample_bucket_name
         return bucket_to_generators
 
     def create_tasks(self, source_bucket, target_bucket, downsample_config: DownsampleConfiguration, mapping,
                      created_tasks,
                      created_label_ids,
-                     labels):
-        generators = []
+                     labels,
+                     chained: bool = False):
+        generators: list[BaseQueryGenerator] = []
         # Loop through each measurement and add it to the Flux query with the appropriate aggregation function
         for measurement, fields in mapping.items():
 
-            generator = QueryGenerator(source_bucket, target_bucket, downsample_config, measurement,
-                                       fields, self._task_prefix)
+            generator_cls = ChainedQueryGenerator if chained else SourceQueryGenerator
+            generator = generator_cls(source_bucket, target_bucket, downsample_config, measurement,
+                                      fields, self._task_prefix)
             generators.append(generator)
 
             task = self.create_or_update_tasks(created_tasks, generator.generate_task(), generator.task_name())
@@ -279,7 +309,7 @@ class DownsampleManager:
             logger.info("Created Task: %s", create_task.name)
             return create_task
 
-    def post_import(self, bucket_to_generators: dict[str, dict[str, list[QueryGenerator]]]):
+    def post_import(self, bucket_to_generators: dict[str, dict[str, list[BaseQueryGenerator]]]):
         interval = datetime.timedelta(hours=2)
         empty_query_result_limit = datetime.timedelta(days=1) / interval
 
@@ -317,7 +347,7 @@ class DownsampleManager:
         label_downsampling = self.create_or_get_label(LABEL_DOWNSAMPLING)
         created_label_ids.add(label_downsampling.id)
 
-        bucket_to_generators: dict[str, dict[str, list[QueryGenerator]]] = {}
+        bucket_to_generators: dict[str, dict[str, list[BaseQueryGenerator]]] = {}
 
         for source_bucket in self._buckets:
             bucket_queries = self.process(label_downsampling, source_bucket, created_tasks, created_label_ids)

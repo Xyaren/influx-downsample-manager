@@ -19,6 +19,47 @@ source_buckets:
 metric_detection_duration: "1d"
 
 # Downsampling configurations keyed by target suffix
+#
+# Each entry creates a target bucket named "<source_bucket>_<suffix>" with the
+# specified aggregation interval and retention policy.
+#
+# Configs are automatically sorted by interval (finest first) before processing,
+# so declaration order does not matter.
+#
+# Fields:
+#   interval  (required) — Aggregation window size (e.g. "1m", "10m", "1h").
+#   every     (required) — How often the InfluxDB task runs (e.g. "15m", "1h").
+#   offset    (required) — Minimum task offset to stagger execution.
+#   max_offset           — Maximum task offset. When set, each task gets a
+#                          deterministic offset between offset and max_offset
+#                          (based on SHA-256 of the task name) to spread load.
+#   expires              — Retention period for the target bucket (e.g. "1w",
+#                          "31d"). Omit for infinite retention.
+#   bucket_shard_group_interval — InfluxDB shard group duration for the target
+#                                 bucket. Tune for query performance.
+#   chained              — When true, this tier reads from the previous (finer)
+#                          tier's bucket instead of the raw source bucket.
+#                          This reduces query load significantly for coarser
+#                          aggregations.
+#
+#                          The first tier (finest interval) always reads from
+#                          the source bucket regardless of this setting.
+#
+#                          Numeric fields use mean-of-means, which is
+#                          acceptable for monitoring data with fairly uniform
+#                          sample rates. Non-numeric fields use "last" and
+#                          are unaffected.
+#
+#                          Because no auxiliary fields are stored, switching
+#                          between chained: true and chained: false is safe
+#                          at any time without data migration.
+#
+#                          Trade-offs:
+#                          - Reduces data scanned at coarser tiers
+#                          - Introduces a dependency: if a finer tier falls
+#                            behind, coarser tiers will have stale data
+#
+#                          Default: false (reads directly from source bucket)
 downsample_configs:
   "1w":
     bucket_shard_group_interval: "1d"
@@ -34,9 +75,11 @@ downsample_configs:
     offset: "1m"
     max_offset: "55m"
     expires: "31d"
+    chained: true
   "inf":
     bucket_shard_group_interval: "30d"
     interval: "1h"
     every: "1d"
     offset: "5m"
     max_offset: "1h"
+    chained: true

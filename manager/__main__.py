@@ -35,6 +35,8 @@ def build_bucket_configs(raw: dict[str, dict]) -> dict[str, DownsampleConfigurat
             cfg["expires"] = entry["expires"]
         if "bucket_shard_group_interval" in entry:
             cfg["bucket_shard_group_interval"] = entry["bucket_shard_group_interval"]
+        if "chained" in entry:
+            cfg["chained"] = bool(entry["chained"])
         configs[suffix] = cfg
     return configs
 

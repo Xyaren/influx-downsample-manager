@@ -22,6 +22,7 @@ class DownsampleConfiguration(TypedDict):
     max_offset: NotRequired[str]
     expires: NotRequired[str]
     bucket_shard_group_interval: NotRequired[str]
+    chained: NotRequired[bool]
 
 
 Mapping = dict[str, dict[str, FieldData]]
