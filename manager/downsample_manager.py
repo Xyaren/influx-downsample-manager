@@ -17,8 +17,8 @@ from influxdb_client.service.buckets_service import BucketsService
 from influxdb_client.service.tasks_service import TasksService
 from pytimeparse.timeparse import timeparse
 
-from .model import FieldData, LabelDef, Mapping, DownsampleConfiguration
-from .query_generator import BaseQueryGenerator, SourceQueryGenerator, ChainedQueryGenerator
+from .model import DownsampleConfiguration, FieldData, LabelDef, Mapping
+from .query_generator import BaseQueryGenerator, ChainedQueryGenerator, SourceQueryGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +26,15 @@ LABEL_DOWNSAMPLING = LabelDef(name="Downsampling", description="Downsampling", c
 
 
 class DownsampleManager:
-
-    def __init__(self, org: str,
-                 token: str,
-                 buckets: Sequence[str],
-                 bucket_configs: dict[str, DownsampleConfiguration],
-                 url: str,
-                 metric_detection_duration: str = "1d"):
+    def __init__(
+        self,
+        org: str,
+        token: str,
+        buckets: Sequence[str],
+        bucket_configs: dict[str, DownsampleConfiguration],
+        url: str,
+        metric_detection_duration: str = "1d",
+    ):
         self._metric_detection_duration = metric_detection_duration
         self._buckets = buckets
         self._bucket_configs = bucket_configs
@@ -40,7 +42,8 @@ class DownsampleManager:
         self._task_prefix = "gen_"
 
         self._client = InfluxDBClient(
-            url=url, token=token,
+            url=url,
+            token=token,
             timeout=int(datetime.timedelta(minutes=1).total_seconds() * 1000),
         )
         self._organization: Organization = self._client.organizations_api().find_organizations(org=org)[0]
@@ -71,9 +74,11 @@ class DownsampleManager:
             return self._client.labels_api().create_label(
                 name=label.name,
                 org_id=self._organization.id,
-                properties={"color": label.color,
-                            "description": label.description,
-                            "creator": "influx-downsample-manager"}
+                properties={
+                    "color": label.color,
+                    "description": label.description,
+                    "creator": "influx-downsample-manager",
+                },
             )
         else:
             if "creator" in existing.properties and existing.properties["creator"] == "influx-downsample-manager":
@@ -97,8 +102,13 @@ class DownsampleManager:
                 shard_group_duration_seconds = timeparse(bucket_shard_group_interval)
                 if shard_group_duration_seconds is None:
                     raise Exception("Can't parse " + expires)
-            rules = [BucketRetentionRules(type='expire', every_seconds=every_seconds,
-                                          shard_group_duration_seconds=shard_group_duration_seconds)]
+            rules = [
+                BucketRetentionRules(
+                    type="expire",
+                    every_seconds=every_seconds,
+                    shard_group_duration_seconds=shard_group_duration_seconds,
+                )
+            ]
 
         bucket: Bucket | None = self._client.buckets_api().find_bucket_by_name(bucket_name=bucket_name)
 
@@ -106,9 +116,7 @@ class DownsampleManager:
             bucket.retention_rules = rules
             return self._client.buckets_api().update_bucket(bucket)
         else:
-            bucket = Bucket(name=bucket_name,
-                            retention_rules=rules,
-                            org_id=self._organization.id)
+            bucket = Bucket(name=bucket_name, retention_rules=rules, org_id=self._organization.id)
             return self._client.buckets_api().create_bucket(bucket)
 
     def add_label_to_bucket(self, bucket: Bucket, label: Label):
@@ -124,7 +132,7 @@ class DownsampleManager:
     def get_measurements_and_fields(self, bucket: str) -> Mapping:
         flux = f"""
         import "types"
-    
+
         from(bucket: "{bucket}")
             |> range(start: -{self._metric_detection_duration})
             |> keep(columns: ["_measurement","_field","_value"])
@@ -161,22 +169,31 @@ class DownsampleManager:
     def cleanup_labels(self, created_label_ids):
         labels: list[Label] = self._client.labels_api().find_label_by_org(self._organization.id)
         for label in labels:
-            if "creator" in label.properties and label.properties["creator"] == "influx-downsample-manager":
-                if label.id not in created_label_ids:
-                    self._client.labels_api().delete_label(label)
-                    logger.info("Deleted Label: %s", label.name)
+            if (
+                "creator" in label.properties
+                and label.properties["creator"] == "influx-downsample-manager"
+                and label.id not in created_label_ids
+            ):
+                self._client.labels_api().delete_label(label)
+                logger.info("Deleted Label: %s", label.name)
 
     def cleanup_tasks(self, label_downsampling: Label, created_tasks: set[str]):
         tasks: list[Task] = list(self._client.tasks_api().find_tasks_iter(org_id=self._organization.id))
         for task in tasks:
-            if label_downsampling in task.labels:
-                if task.name.startswith(self._task_prefix) and task.id not in created_tasks:
-                    self._client.tasks_api().delete_task(task_id=task.id)
-                    logger.info("Deleted Task: %s", task.name)
+            if (
+                label_downsampling in task.labels
+                and task.name.startswith(self._task_prefix)
+                and task.id not in created_tasks
+            ):
+                self._client.tasks_api().delete_task(task_id=task.id)
+                logger.info("Deleted Task: %s", task.name)
 
     @staticmethod
-    def _sorted_bucket_configs(bucket_configs: dict[str, DownsampleConfiguration]) -> list[tuple[str, DownsampleConfiguration]]:
+    def _sorted_bucket_configs(
+        bucket_configs: dict[str, DownsampleConfiguration],
+    ) -> list[tuple[str, DownsampleConfiguration]]:
         """Sort bucket configs by interval duration (ascending) so chaining reads from the finest granularity first."""
+
         def _interval_seconds(cfg: DownsampleConfiguration) -> int:
             parsed = timeparse(cfg["interval"])
             if parsed is None:
@@ -185,12 +202,12 @@ class DownsampleManager:
 
         return sorted(bucket_configs.items(), key=lambda item: _interval_seconds(item[1]))
 
-    def process(self, label_downsampling: Label, source_bucket: str, created_tasks: set[str],
-                created_label_ids: set[str]):
+    def process(
+        self, label_downsampling: Label, source_bucket: str, created_tasks: set[str], created_label_ids: set[str]
+    ):
         source_label = self.create_or_get_label(
-            LabelDef(name="Source: " + source_bucket,
-                     description="Source: " + source_bucket,
-                     color="#383e42"))
+            LabelDef(name="Source: " + source_bucket, description="Source: " + source_bucket, color="#383e42")
+        )
         created_label_ids.add(source_label.id)
 
         bucket_to_generators: dict[str, list[BaseQueryGenerator]] = {}
@@ -201,40 +218,51 @@ class DownsampleManager:
         prev_bucket_name: str | None = None
 
         # Loop through each bucket configuration (finest interval first)
-        for i, (suffix, bucket_config) in enumerate(sorted_configs):
+        for _i, (suffix, bucket_config) in enumerate(sorted_configs):
             downsample_bucket_name = source_bucket + "_" + suffix
             chained = bucket_config.get("chained", False)
 
             # Determine which bucket this tier reads from
             if chained and prev_bucket_name is not None:
                 effective_source = prev_bucket_name
-                logger.info("Chaining: %s reads from %s (instead of %s)",
-                            downsample_bucket_name, effective_source, source_bucket)
+                logger.info(
+                    "Chaining: %s reads from %s (instead of %s)",
+                    downsample_bucket_name,
+                    effective_source,
+                    source_bucket,
+                )
             else:
                 effective_source = source_bucket
 
             target_bucket_label = self.create_or_get_label(
-                LabelDef(name="Bucket: " + downsample_bucket_name,
-                         description="Bucket: " + downsample_bucket_name,
-                         color="#ADFF2F"))
+                LabelDef(
+                    name="Bucket: " + downsample_bucket_name,
+                    description="Bucket: " + downsample_bucket_name,
+                    color="#ADFF2F",
+                )
+            )
             created_label_ids.add(target_bucket_label.id)
 
-            interval = bucket_config['interval']
-            expires = bucket_config['expires'] if 'expires' in bucket_config else None
-            bucket = self.create_bucket(downsample_bucket_name, expires, bucket_config['bucket_shard_group_interval'])
+            interval = bucket_config["interval"]
+            expires = bucket_config.get("expires")
+            bucket = self.create_bucket(downsample_bucket_name, expires, bucket_config["bucket_shard_group_interval"])
             self.add_label_to_bucket(bucket, target_bucket_label)
             self.add_label_to_bucket(bucket, label_downsampling)
             self.add_label_to_bucket(bucket, source_label)
 
             interval_label = self.create_or_get_label(
-                LabelDef(name="Interval: " + interval, description="Interval: " + interval, color="#800080"))
+                LabelDef(name="Interval: " + interval, description="Interval: " + interval, color="#800080")
+            )
             created_label_ids.add(interval_label.id)
             self.add_label_to_bucket(bucket, interval_label)
 
             expiry_label = self.create_or_get_label(
-                LabelDef(name="Retention: " + (expires or "Infinity"),
-                         description="Retention: " + (expires or "Infinity"),
-                         color="#d22b2b"))
+                LabelDef(
+                    name="Retention: " + (expires or "Infinity"),
+                    description="Retention: " + (expires or "Infinity"),
+                    color="#d22b2b",
+                )
+            )
             created_label_ids.add(expiry_label.id)
             self.add_label_to_bucket(bucket, expiry_label)
 
@@ -242,30 +270,39 @@ class DownsampleManager:
             mapping: Mapping = self.get_measurements_and_fields(source_bucket)
 
             labels = [source_label, target_bucket_label, interval_label, label_downsampling]
-            generators = self.create_tasks(effective_source,
-                                           downsample_bucket_name,
-                                           bucket_config,
-                                           mapping,
-                                           created_tasks,
-                                           created_label_ids, labels,
-                                           chained=chained)
+            generators = self.create_tasks(
+                effective_source,
+                downsample_bucket_name,
+                bucket_config,
+                mapping,
+                created_tasks,
+                created_label_ids,
+                labels,
+                chained=chained,
+            )
 
             bucket_to_generators[downsample_bucket_name] = generators
             prev_bucket_name = downsample_bucket_name
         return bucket_to_generators
 
-    def create_tasks(self, source_bucket, target_bucket, downsample_config: DownsampleConfiguration, mapping,
-                     created_tasks,
-                     created_label_ids,
-                     labels,
-                     chained: bool = False):
+    def create_tasks(
+        self,
+        source_bucket,
+        target_bucket,
+        downsample_config: DownsampleConfiguration,
+        mapping,
+        created_tasks,
+        created_label_ids,
+        labels,
+        chained: bool = False,
+    ):
         generators: list[BaseQueryGenerator] = []
         # Loop through each measurement and add it to the Flux query with the appropriate aggregation function
         for measurement, fields in mapping.items():
-
             generator_cls = ChainedQueryGenerator if chained else SourceQueryGenerator
-            generator = generator_cls(source_bucket, target_bucket, downsample_config, measurement,
-                                      fields, self._task_prefix)
+            generator = generator_cls(
+                source_bucket, target_bucket, downsample_config, measurement, fields, self._task_prefix
+            )
             generators.append(generator)
 
             task = self.create_or_update_tasks(created_tasks, generator.generate_task(), generator.task_name())
@@ -273,7 +310,8 @@ class DownsampleManager:
                 self.add_label_to_task(task, label)
 
             measurement_label = self.create_or_get_label(
-                LabelDef("Measurement: " + measurement, "Measurement: " + measurement, color="#008080"))
+                LabelDef("Measurement: " + measurement, "Measurement: " + measurement, color="#008080")
+            )
             created_label_ids.add(measurement_label.id)
             self.add_label_to_task(task, measurement_label)
 
@@ -298,13 +336,15 @@ class DownsampleManager:
                 return _existing_task
 
             updated_task = self._client.tasks_api().update_task_request(
-                _existing_task.id, task_update_request=TaskUpdateRequest(flux=flux_query))
+                _existing_task.id, task_update_request=TaskUpdateRequest(flux=flux_query)
+            )
             created_tasks.add(updated_task.id)
             logger.info("Updated Task: %s", updated_task.name)
             return updated_task
         else:
             create_task = self._client.tasks_api().create_task(
-                task_create_request=TaskCreateRequest(org_id=self._organization.id, flux=flux_query))
+                task_create_request=TaskCreateRequest(org_id=self._organization.id, flux=flux_query)
+            )
             created_tasks.add(create_task.id)
             logger.info("Created Task: %s", create_task.name)
             return create_task
@@ -313,28 +353,30 @@ class DownsampleManager:
         interval = datetime.timedelta(hours=2)
         empty_query_result_limit = datetime.timedelta(days=1) / interval
 
-        latest_stop = datetime.datetime.now(tz=datetime.timezone.utc).replace(microsecond=0, second=0, minute=0) \
-                      + datetime.timedelta(hours=1)
+        latest_stop = datetime.datetime.now(tz=datetime.timezone.utc).replace(
+            microsecond=0, second=0, minute=0
+        ) + datetime.timedelta(hours=1)
 
         for source_bucket, collected_generators in bucket_to_generators.items():
             for target_bucket, generators in collected_generators.items():
                 for generator in generators:
-
                     stop = latest_stop
                     empty_query_result_count = 0
 
                     earliest_start = None
                     if generator.expires is not None:
-                        earliest_start = datetime.datetime.now(tz=datetime.timezone.utc) - \
-                                         datetime.timedelta(seconds=timeparse(generator.expires))
+                        earliest_start = datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(
+                            seconds=timeparse(generator.expires)
+                        )
 
                     while empty_query_result_count < empty_query_result_limit:
-                        start = (stop - interval)
+                        start = stop - interval
                         if earliest_start is not None and start < earliest_start:
                             logger.info("Finished")
                             break
-                        logger.info("Query %s/%s/%s/%s-%s",
-                                    source_bucket, target_bucket, generator.measurement, start, stop)
+                        logger.info(
+                            "Query %s/%s/%s/%s-%s", source_bucket, target_bucket, generator.measurement, start, stop
+                        )
                         query = generator.generate_query(start.isoformat(), stop.isoformat())
                         query_result = self._client.query_api().query(query=query, org=self._organization.id)
                         stop = stop - interval

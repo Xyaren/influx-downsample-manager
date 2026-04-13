@@ -4,20 +4,22 @@ from abc import ABC, abstractmethod
 
 from pytimeparse.timeparse import timeparse
 
-from .model import FieldData, DownsampleConfiguration
-from .utils import timedelta_to_flux_duration, hash_to_integer
+from .model import DownsampleConfiguration, FieldData
+from .utils import hash_to_integer, timedelta_to_flux_duration
 
 
 class BaseQueryGenerator(ABC):
     """Shared scaffolding for Flux downsampling query generation."""
 
-    def __init__(self,
-                 source_bucket: str,
-                 target_bucket: str,
-                 downsample_config: DownsampleConfiguration,
-                 measurement: str,
-                 fields: dict[str, FieldData],
-                 task_prefix: str = "gen_"):
+    def __init__(
+        self,
+        source_bucket: str,
+        target_bucket: str,
+        downsample_config: DownsampleConfiguration,
+        measurement: str,
+        fields: dict[str, FieldData],
+        task_prefix: str = "gen_",
+    ):
         self.task_prefix = task_prefix
         self.source_bucket = source_bucket
         self.target_bucket = target_bucket
@@ -63,7 +65,7 @@ class BaseQueryGenerator(ABC):
             f'from(bucket:"{self.source_bucket}")',
             f"  |> range({range_expr})",
             f'  |> filter(fn: (r) => r._measurement == "{self.measurement}")',
-            f"  |> filter(fn: (r) => contains(value: r._field, set: nonNumericFields))",
+            "  |> filter(fn: (r) => contains(value: r._field, set: nonNumericFields))",
             f"  |> aggregateWindow(every: {self.interval}, fn: last)",
             f'  |> to(bucket:"{self.target_bucket}")',
         ]
@@ -85,26 +87,15 @@ class BaseQueryGenerator(ABC):
         return fragments
 
     def generate_task(self) -> str:
-        imports = (
-            'import "influxdata/influxdb/tasks"\n'
-            'import "date"\n'
-            '\n'
-        )
+        imports = 'import "influxdata/influxdb/tasks"\nimport "date"\n\n'
         offset_as_influx_duration = timedelta_to_flux_duration(self.offset_with_predictable_factor())
         task_def = f'option task = {{name: "{self.task_name()}", every: {self.every}, offset: {offset_as_influx_duration}}}\n\n'
-        prep = (
-            "start = date.truncate(t: tasks.lastSuccess(orTime: -task.every), unit: 1m)\n"
-            "\n"
-        )
+        prep = "start = date.truncate(t: tasks.lastSuccess(orTime: -task.every), unit: 1m)\n\n"
         fragments = self._build_flux_body(range_expr="start: start")
         return imports + task_def + prep + "\n\n".join(fragments)
 
     def generate_query(self, start: str, stop: str) -> str:
-        preamble = (
-            f'start = time(v:"{start}")\n'
-            f'stop = time(v:"{stop}")\n'
-            '\n'
-        )
+        preamble = f'start = time(v:"{start}")\nstop = time(v:"{stop}")\n\n'
         fragments = self._build_flux_body(
             range_expr="start: start, stop: stop",
             suffix_numeric='  |> limit(n:1)\n  |> yield(name: "numeric")',
@@ -130,7 +121,7 @@ class SourceQueryGenerator(BaseQueryGenerator):
             f'from(bucket:"{self.source_bucket}")',
             f"  |> range({range_expr})",
             f'  |> filter(fn: (r) => r._measurement == "{self.measurement}")',
-            f"  |> filter(fn: (r) => contains(value: r._field, set: numericFields))",
+            "  |> filter(fn: (r) => contains(value: r._field, set: numericFields))",
             f"  |> aggregateWindow(every: {self.interval}, fn: mean)",
             f'  |> to(bucket:"{self.target_bucket}")',
         ]
@@ -160,7 +151,7 @@ class ChainedQueryGenerator(BaseQueryGenerator):
             f'from(bucket:"{self.source_bucket}")',
             f"  |> range({range_expr})",
             f'  |> filter(fn: (r) => r._measurement == "{self.measurement}")',
-            f"  |> filter(fn: (r) => contains(value: r._field, set: numericFields))",
+            "  |> filter(fn: (r) => contains(value: r._field, set: numericFields))",
             f"  |> aggregateWindow(every: {self.interval}, fn: mean)",
             f'  |> to(bucket:"{self.target_bucket}")',
         ]

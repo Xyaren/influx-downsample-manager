@@ -7,8 +7,8 @@ import sys
 import coloredlogs
 import yaml
 
-from .model import DownsampleConfiguration
 from .downsample_manager import DownsampleManager
+from .model import DownsampleConfiguration
 
 coloredlogs.install(stream=sys.stdout)
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 def load_config(path: str = "config.yaml") -> dict:
     config_path = os.environ.get("CONFIG_PATH", path)
-    with open(config_path, "r") as f:
+    with open(config_path) as f:
         return yaml.safe_load(f)
 
 

@@ -10,7 +10,7 @@ Automated tool that creates and manages downsampling tasks for InfluxDB time-ser
 ## Architecture
 
 ### Components
-- `main.py` — Entry point. Configures source buckets, downsampling rules, credentials, and runs the manager.
+- `manager/__main__.py` — Entry point (`python -m manager`). Loads config, parses credentials, and runs the manager.
 - `manager/downsample_manager.py` — `DownsampleManager` class. Orchestrates bucket/task/label creation, cleanup, and InfluxDB API interactions.
 - `manager/query_generator.py` — `BaseQueryGenerator` ABC with two concrete variants:
   - `SourceQueryGenerator` — reads from the raw source bucket; aggregates with mean/last.
@@ -37,8 +37,10 @@ Automated tool that creates and manages downsampling tasks for InfluxDB time-ser
 
 ## Running Locally
 - Uses a Python venv at `venv/` in the project root
-- Run with: `venv/Scripts/python main.py` (Windows) or `venv/bin/python main.py` (Linux/macOS)
-- Install deps: `venv/Scripts/pip install -r requirements.txt`
+- Install runtime deps: `pip install -r requirements.txt`
+- Install runtime + test deps: `pip install -r requirements-dev.txt`
+- Run with: `python -m manager` (or `venv/Scripts/python -m manager` on Windows / `venv/bin/python -m manager` on Linux/macOS)
+- Run tests: `pytest tests/ -v`
 
 ## Deployment
 - Docker: `python:3` base, installs deps, runs `python3 /app/main.py`
