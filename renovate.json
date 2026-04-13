@@ -1,0 +1,32 @@
+{
+    "extends": [
+        "config:recommended"
+    ],
+    "pip_requirements": {
+        "fileMatch": [
+            "requirements\\.txt$",
+            "requirements-dev\\.txt$"
+        ]
+    },
+    "packageRules": [
+        {
+            "matchManagers": [
+                "pip_requirements"
+            ],
+            "groupName": "python dependencies"
+        },
+        {
+            "matchManagers": [
+                "dockerfile"
+            ],
+            "groupName": "docker"
+        },
+        {
+            "matchManagers": [
+                "github-actions"
+            ],
+            "groupName": "github actions",
+            "automerge": true
+        }
+    ]
+}

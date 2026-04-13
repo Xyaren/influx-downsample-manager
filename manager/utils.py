@@ -10,12 +10,13 @@ def hash_to_decimal(input_string: str, min_decimal: float, max_decimal: float) -
     hash_decimal = int(hash_object.hexdigest(), 16)
 
     # Normalize the hash_decimal to a value between 0 and 1
-    normalized_value = hash_decimal / (2 ** 256 - 1)
+    normalized_value = hash_decimal / (2**256 - 1)
 
     # Map the normalized_value to the specified range
     scaled_decimal = min_decimal + normalized_value * (max_decimal - min_decimal)
 
     return scaled_decimal
+
 
 def hash_to_integer(input_string: str, min_integer: int, max_integer: int) -> int:
     # Use SHA-256 for hashing, you can choose a different algorithm if needed
@@ -29,6 +30,7 @@ def hash_to_integer(input_string: str, min_integer: int, max_integer: int) -> in
 
     return scaled_integer
 
+
 def timedelta_to_flux_duration(td: timedelta) -> str:
     seconds = round(td.total_seconds())
 
@@ -38,11 +40,11 @@ def timedelta_to_flux_duration(td: timedelta) -> str:
 
     # Build the Flux duration string, omitting parts with value zero
     flux_duration_parts = [
-        (int(days), 'd'),
-        (int(hours), 'h'),
-        (int(minutes), 'm'),
-        (int(seconds), 's'),
+        (int(days), "d"),
+        (int(hours), "h"),
+        (int(minutes), "m"),
+        (int(seconds), "s"),
     ]
 
-    flux_duration = ''.join(f"{value}{unit}" for value, unit in flux_duration_parts if value != 0)
+    flux_duration = "".join(f"{value}{unit}" for value, unit in flux_duration_parts if value != 0)
     return flux_duration or "0s"
