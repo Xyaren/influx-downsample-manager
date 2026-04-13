@@ -353,7 +353,7 @@ class DownsampleManager:
         interval = datetime.timedelta(hours=2)
         empty_query_result_limit = datetime.timedelta(days=1) / interval
 
-        latest_stop = datetime.datetime.now(tz=datetime.timezone.utc).replace(
+        latest_stop = datetime.datetime.now(tz=datetime.UTC).replace(
             microsecond=0, second=0, minute=0
         ) + datetime.timedelta(hours=1)
 
@@ -365,7 +365,7 @@ class DownsampleManager:
 
                     earliest_start = None
                     if generator.expires is not None:
-                        earliest_start = datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(
+                        earliest_start = datetime.datetime.now(tz=datetime.UTC) - datetime.timedelta(
                             seconds=timeparse(generator.expires)
                         )
 
