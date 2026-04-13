@@ -25,14 +25,14 @@ downsample_configs:
     interval: "1m"
     every: "15m"
     offset: "30s"
-    max_offset: "5m"
+    max_offset: "13m"
     expires: "1w"
   "31d":
     bucket_shard_group_interval: "3d"
     interval: "10m"
     every: "1h"
     offset: "1m"
-    max_offset: "30m"
+    max_offset: "55m"
     expires: "31d"
   "inf":
     bucket_shard_group_interval: "30d"

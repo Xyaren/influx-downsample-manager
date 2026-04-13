@@ -34,7 +34,9 @@ class QueryGenerator:
 
     def offset_with_predictable_factor(self) -> datetime.timedelta:
         """
-        Prevent all tasks from running at the exact same time. Dynamic offset should spread the load.
+        Prevent all tasks from running at the exact same time.
+        Hashes into millisecond space for better distribution, then rounds
+        to whole seconds since InfluxDB task offsets don't support sub-second precision.
         """
         min_offset = timeparse(self.downsample_config["offset"])
         if "max_offset" not in self.downsample_config:
@@ -44,7 +46,11 @@ class QueryGenerator:
         if min_offset == max_offset:
             return datetime.timedelta(seconds=min_offset)
 
-        seconds = hash_to_integer(self.task_name(), min_offset, max_offset)
+        # Hash in millisecond space for uniform distribution, then convert to seconds
+        min_ms = min_offset * 1000
+        max_ms = max_offset * 1000
+        ms = hash_to_integer(self.task_name(), min_ms, max_ms)
+        seconds = round(ms / 1000)
         return datetime.timedelta(seconds=seconds)
 
     def _build_field_query(
