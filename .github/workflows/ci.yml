@@ -27,10 +27,21 @@ jobs:
         with:
           python-version: "3.14"
       - run: pip install -r requirements-dev.txt
-      - run: pytest tests/ -v
+      - run: pytest tests/ -v -m unit
+
+  integration-test:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: pip install -r requirements-dev.txt
+      - run: pytest tests/integration/ -v -m integration
 
   build:
-    needs: test
+    needs: integration-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
