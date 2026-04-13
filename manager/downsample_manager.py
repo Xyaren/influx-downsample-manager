@@ -1,6 +1,7 @@
 import datetime
 import logging
-from typing import Set, List
+from collections.abc import Sequence
+from types import TracebackType
 
 from influxdb_client.client.flux_table import TableList
 from influxdb_client.client.influxdb_client import InfluxDBClient
@@ -19,7 +20,7 @@ from pytimeparse.timeparse import timeparse
 from .model import FieldData, LabelDef, Mapping, DownsampleConfiguration
 from .query_generator import QueryGenerator
 
-logger = logging.getLogger(__name__)  # get a specific logger object
+logger = logging.getLogger(__name__)
 
 LABEL_DOWNSAMPLING = LabelDef(name="Downsampling", description="Downsampling", color="#ffff00")
 
@@ -28,7 +29,7 @@ class DownsampleManager:
 
     def __init__(self, org: str,
                  token: str,
-                 buckets: Set[str],
+                 buckets: Sequence[str],
                  bucket_configs: dict[str, DownsampleConfiguration],
                  url: str,
                  metric_detection_duration: str = "1d"):
@@ -38,11 +39,28 @@ class DownsampleManager:
 
         self._task_prefix = "gen_"
 
-        self._client = InfluxDBClient(url=url, token=token, timeout=datetime.timedelta(minutes=1).microseconds / 1000)
+        self._client = InfluxDBClient(
+            url=url, token=token,
+            timeout=int(datetime.timedelta(minutes=1).total_seconds() * 1000),
+        )
         self._organization: Organization = self._client.organizations_api().find_organizations(org=org)[0]
 
         self._buckets_service = BucketsService(self._client.api_client)
         self._tasks_service = TasksService(self._client.api_client)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self._client.close()
 
     def create_or_get_label(self, label: LabelDef):
         existing_labels = self._client.labels_api().find_label_by_org(org_id=self._organization.id)
@@ -148,7 +166,7 @@ class DownsampleManager:
                     self._client.labels_api().delete_label(label)
                     logger.info("Deleted Label: %s", label.name)
 
-    def cleanup_tasks(self, label_downsampling: Label, created_tasks: Set[str]):
+    def cleanup_tasks(self, label_downsampling: Label, created_tasks: set[str]):
         tasks: list[Task] = list(self._client.tasks_api().find_tasks_iter(org_id=self._organization.id))
         for task in tasks:
             if label_downsampling in task.labels:
@@ -156,8 +174,8 @@ class DownsampleManager:
                     self._client.tasks_api().delete_task(task_id=task.id)
                     logger.info("Deleted Task: %s", task.name)
 
-    def process(self, label_downsampling: Label, source_bucket: str, created_tasks: Set[str],
-                created_label_ids: Set[str]):
+    def process(self, label_downsampling: Label, source_bucket: str, created_tasks: set[str],
+                created_label_ids: set[str]):
         source_label = self.create_or_get_label(
             LabelDef(name="Source: " + source_bucket,
                      description="Source: " + source_bucket,
@@ -197,7 +215,7 @@ class DownsampleManager:
 
             mapping: Mapping = self.get_measurements_and_fields(source_bucket)
 
-            labels = [source_label, target_bucket_label, interval_label, source_label, label_downsampling]
+            labels = [source_label, target_bucket_label, interval_label, label_downsampling]
             generators = self.create_tasks(source_bucket,
                                            downsample_bucket_name,
                                            bucket_config,
@@ -231,9 +249,17 @@ class DownsampleManager:
 
         return generators
 
-    def create_or_update_tasks(self, created_tasks, flux_query, task_name):
+    def create_or_update_tasks(self, created_tasks: set[str], flux_query: str, task_name: str) -> Task:
         existing: list[Task] = self._client.tasks_api().find_tasks(org_id=self._organization.id, name=task_name)
-        if len(existing) == 1:
+
+        if len(existing) > 1:
+            # Duplicates found — keep the first, delete the rest
+            logger.warning("Found %d duplicate tasks named '%s', cleaning up", len(existing), task_name)
+            for duplicate in existing[1:]:
+                self._client.tasks_api().delete_task(task_id=duplicate.id)
+                logger.info("Deleted duplicate Task: %s (%s)", duplicate.name, duplicate.id)
+
+        if len(existing) >= 1:
             _existing_task = existing[0]
 
             if _existing_task.flux == flux_query:
@@ -248,7 +274,7 @@ class DownsampleManager:
             return updated_task
         else:
             create_task = self._client.tasks_api().create_task(
-                task_create_request=(TaskCreateRequest(org_id=self._organization.id, flux=flux_query)))
+                task_create_request=TaskCreateRequest(org_id=self._organization.id, flux=flux_query))
             created_tasks.add(create_task.id)
             logger.info("Created Task: %s", create_task.name)
             return create_task

@@ -8,5 +8,4 @@ RUN pip3 install -r ./requirements.txt
 ADD manager /app/manager
 ADD main.py /app
 
-CMD ["/app/main.py"]
-ENTRYPOINT ["python3"]
+ENTRYPOINT ["python3", "-m", "manager"]

@@ -4,7 +4,7 @@ import json
 from pytimeparse.timeparse import timeparse
 
 from .model import FieldData, DownsampleConfiguration
-from .utils import hash_to_decimal, timedelta_to_flux_duration, hash_to_integer
+from .utils import timedelta_to_flux_duration, hash_to_integer
 
 
 class QueryGenerator:
@@ -29,7 +29,7 @@ class QueryGenerator:
         self.numeric_fields = [k for k, v in fields.items() if v.numeric]
         self.non_numeric_fields = [k for k, v in fields.items() if v.numeric is False]
 
-    def task_name(self):
+    def task_name(self) -> str:
         return f"{self.task_prefix}{self.target_bucket}_{self.measurement}"
 
     def offset_with_predictable_factor(self) -> datetime.timedelta:
@@ -47,89 +47,68 @@ class QueryGenerator:
         seconds = hash_to_integer(self.task_name(), min_offset, max_offset)
         return datetime.timedelta(seconds=seconds)
 
-    def generate_task(self):
+    def _build_field_query(
+        self,
+        field_names: list[str],
+        var_name: str,
+        agg_fn: str,
+        range_expr: str,
+        suffix: str = "",
+    ) -> str:
+        """Build a Flux sub-query for a set of fields with a given aggregation function."""
+        lines = [
+            f"{var_name} = {json.dumps(field_names)}",
+            f'from(bucket:"{self.source_bucket}")',
+            f"  |> range({range_expr})",
+            f'  |> filter(fn: (r) => r._measurement == "{self.measurement}")',
+            f'  |> filter(fn: (r) => contains(value: r._field, set: {var_name}))',
+            f"  |> aggregateWindow(every: {self.interval}, fn: {agg_fn})",
+            f'  |> to(bucket:"{self.target_bucket}")',
+        ]
+        if suffix:
+            lines.append(suffix)
+        return "\n".join(lines) + "\n"
+
+    def _build_flux_body(self, range_expr: str, suffix_numeric: str = "", suffix_non_numeric: str = "") -> list[str]:
+        """Build the shared Flux query fragments for both task and ad-hoc query modes."""
+        fragments: list[str] = []
+        if self.numeric_fields:
+            fragments.append(
+                self._build_field_query(self.numeric_fields, "numericFields", "mean", range_expr, suffix_numeric)
+            )
+        if self.non_numeric_fields:
+            fragments.append(
+                self._build_field_query(self.non_numeric_fields, "nonNumericFields", "last", range_expr, suffix_non_numeric)
+            )
+        return fragments
+
+    def generate_task(self) -> str:
         imports = (
-            f'import "influxdata/influxdb/tasks"\n'
-            f'import "date"\n'
-            f'\n'
+            'import "influxdata/influxdb/tasks"\n'
+            'import "date"\n'
+            '\n'
         )
-        prep = (
-            f"start = date.truncate(t: tasks.lastSuccess(orTime: -task.every), unit: 1m)\n"
-            # f"shift_by = duration(v: (int(v: task.every) / 2))\n"
-            "\n"
-        )
-        flux_queries: list[str] = []
-        if len(self.numeric_fields) > 0:
-            flux_query = (
-                f"numericFields = {json.dumps(self.numeric_fields)}\n"
-                f"from(bucket:\"{self.source_bucket}\")\n"
-                f"  |> range(start: start)\n"
-                f'  |> filter(fn: (r) => r._measurement == "{self.measurement}")\n'
-                f'  |> filter(fn: (r) => contains(value: r._field, set: numericFields))\n'
-                f'  |> aggregateWindow(every: {self.interval}, fn: mean)\n'
-                # f'  |> timeShift(duration: shift_by)\n'
-                f'  |> to(bucket:"{self.target_bucket}")\n'
-            )
-            flux_queries.append(flux_query)
-
-        if len(self.non_numeric_fields) > 0:
-            flux_query = (
-                f"nonNumericFields = {json.dumps(self.non_numeric_fields)}\n"
-                f"from(bucket:\"{self.source_bucket}\")\n"
-                f"  |> range(start: start)\n"
-                f'  |> filter(fn: (r) => r._measurement == "{self.measurement}")\n'
-                f'  |> filter(fn: (r) => contains(value: r._field, set: nonNumericFields))\n'
-                f'  |> aggregateWindow(every: {self.interval}, fn: last)\n'
-                # f'  |> timeShift(duration: shift_by)\n'
-                f'  |> to(bucket:"{self.target_bucket}")\n'
-            )
-            flux_queries.append(flux_query)
-
-        # Define the task properties and create the task
         offset_as_influx_duration = timedelta_to_flux_duration(self.offset_with_predictable_factor())
         task_def = f'option task = {{name: "{self.task_name()}", every: {self.every}, offset: {offset_as_influx_duration}}}\n\n'
-        return imports + task_def + prep + "\n\n".join(flux_queries)
-
-    def generate_query(self, start: str, stop: str):
-        imports = (
-            f'start = time(v:\"{start}\")\n'
-            f'stop = time(v:\"{stop}\")\n'
-            # f"shift_by = duration(v: (int(v: {self.interval}) / 2))\n"
-            f'\n'
+        prep = (
+            "start = date.truncate(t: tasks.lastSuccess(orTime: -task.every), unit: 1m)\n"
+            "\n"
         )
-        flux_queries: list[str] = []
-        if len(self.numeric_fields) > 0:
-            flux_query = (
-                f"numericFields = {json.dumps(self.numeric_fields)}\n"
-                f"from(bucket:\"{self.source_bucket}\")\n"
-                f"  |> range(start: start, stop: stop)\n"
-                f'  |> filter(fn: (r) => r._measurement == "{self.measurement}")\n'
-                f'  |> filter(fn: (r) => contains(value: r._field, set: numericFields))\n'
-                f'  |> aggregateWindow(every: {self.interval}, fn: mean)\n'
-                # f'  |> timeShift(duration: shift_by)\n'
-                f'  |> to(bucket:"{self.target_bucket}")\n'
-                f'  |> limit(n:1)\n'
-                f'  |> yield(name: "numeric")\n'
-            )
-            flux_queries.append(flux_query)
+        fragments = self._build_flux_body(range_expr="start: start")
+        return imports + task_def + prep + "\n\n".join(fragments)
 
-        if len(self.non_numeric_fields) > 0:
-            flux_query = (
-                f"nonNumericFields = {json.dumps(self.non_numeric_fields)}\n"
-                f"from(bucket:\"{self.source_bucket}\")\n"
-                f"  |> range(start: start, stop: stop)\n"
-                f'  |> filter(fn: (r) => r._measurement == "{self.measurement}")\n'
-                f'  |> filter(fn: (r) => contains(value: r._field, set: nonNumericFields))\n'
-                f'  |> aggregateWindow(every: {self.interval}, fn: last)\n'
-                # f'  |> timeShift(duration: shift_by)\n'
-                f'  |> to(bucket:"{self.target_bucket}")\n'
-                f'  |> limit(n:1)\n'
-                f'  |> yield(name: "non_numeric")\n'
-            )
-            flux_queries.append(flux_query)
+    def generate_query(self, start: str, stop: str) -> str:
+        preamble = (
+            f'start = time(v:"{start}")\n'
+            f'stop = time(v:"{stop}")\n'
+            '\n'
+        )
+        fragments = self._build_flux_body(
+            range_expr="start: start, stop: stop",
+            suffix_numeric='  |> limit(n:1)\n  |> yield(name: "numeric")',
+            suffix_non_numeric='  |> limit(n:1)\n  |> yield(name: "non_numeric")',
+        )
+        return preamble + "\n\n".join(fragments)
 
-        # Define the task properties and create the task
-        return imports + "\n\n".join(flux_queries)
-
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.source_bucket} -> {self.target_bucket}: {self.measurement}"
