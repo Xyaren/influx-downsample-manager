@@ -45,4 +45,4 @@ def timedelta_to_flux_duration(td: timedelta) -> str:
     ]
 
     flux_duration = ''.join(f"{value}{unit}" for value, unit in flux_duration_parts if value != 0)
-    return flux_duration
+    return flux_duration or "0s"
