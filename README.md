@@ -19,7 +19,7 @@ Automated tool that creates and manages downsampling tasks for InfluxDB. It disc
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.14+
 - InfluxDB 2.x instance with a valid API token
 
 ## Installation
@@ -140,11 +140,7 @@ Switching between `chained: true` and `chained: false` is safe at any time — n
 ### Local
 
 ```bash
-# Using the package entry point (preferred)
 python -m manager
-
-# Or via the legacy entry point
-python main.py
 ```
 
 ### Docker
@@ -174,7 +170,7 @@ services:
 ```
 
 ```bash
-docker compose up --build
+docker compose up
 ```
 
 All three environment variables override their corresponding values in `config.yaml`, so you can keep secrets out of the config file.
@@ -204,10 +200,10 @@ The container runs the manager once at startup and then on the `CRON_SCHEDULE` v
 ## Project structure
 
 ```
-├── main.py                        # Legacy entry point
 ├── manager/
 │   ├── __init__.py                # Public API exports
 │   ├── __main__.py                # CLI entry point (python -m manager)
+│   ├── config.py                  # Configuration loading and parsing
 │   ├── downsample_manager.py      # Core orchestration and InfluxDB API interactions
 │   ├── query_generator.py         # Flux query generation (Source and Chained variants)
 │   ├── model.py                   # Data structures (FieldData, DownsampleConfiguration, etc.)
