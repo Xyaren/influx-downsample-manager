@@ -36,7 +36,7 @@ inclusion: always
 - When committing changes, add Kiro as co-author using the trailer: `Co-authored-by: Kiro <kiro@amazon.com>`
 
 ## Linting & Formatting
-- Linter/formatter: **ruff** (`ruff==0.11.6` in `requirements-dev.txt`)
+- Linter/formatter: **ruff** (version pinned in #[[file:requirements-dev.txt]])
 - Config lives in `ruff.toml` at the project root
 - Lint check: `ruff check .`
 - Format check: `ruff format --check .`
@@ -44,7 +44,7 @@ inclusion: always
 - CI runs both `ruff check` and `ruff format --check` before tests
 
 ## Testing
-- Test framework: **pytest** (`pytest==8.3.5` in `requirements.txt`)
+- Test framework: **pytest** (version pinned in #[[file:requirements-dev.txt]])
 - Tests live in `tests/` and are discovered automatically by pytest
 - Use plain `assert` statements, not `self.assertEqual` / `self.assertTrue`
 - Use `@pytest.fixture` for shared setup (e.g. mocked `DownsampleManager`)
@@ -55,7 +55,7 @@ inclusion: always
 
 ## Dependencies
 - `requirements.txt` — runtime deps only (installed in Docker image)
-- `requirements-dev.txt` — includes runtime deps via `-r requirements.txt` plus test deps (pytest)
+- `requirements-dev.txt` — includes runtime deps via `-r requirements.txt` plus test deps (pytest, ruff, testcontainers)
 - When adding a new dependency, pin it to a specific version (e.g. `package==1.2.3`)
 - Put test-only packages in `requirements-dev.txt`, not `requirements.txt`
 - Local dev setup: `pip install -r requirements-dev.txt`

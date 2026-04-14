@@ -11,13 +11,14 @@ Automated tool that creates and manages downsampling tasks for InfluxDB time-ser
 
 ### Components
 - `manager/__main__.py` — Entry point (`python -m manager`). Loads config, parses credentials, and runs the manager.
+- `manager/config.py` — Configuration loading (`load_config`), downsample config parsing (`build_bucket_configs`), and source bucket parsing (`parse_source_buckets`) with per-measurement field filtering.
 - `manager/downsample_manager.py` — `DownsampleManager` class. Orchestrates bucket/task/label creation, cleanup, and InfluxDB API interactions.
 - `manager/query_generator.py` — `BaseQueryGenerator` ABC with two concrete variants:
   - `SourceQueryGenerator` — reads from the raw source bucket; aggregates with mean/last.
   - `ChainedQueryGenerator` — reads from a pre-aggregated upstream bucket; applies mean-of-means for numeric fields. Safe to toggle on/off without data migration.
-- `manager/model.py` — Data structures: `FieldData`, `LabelDef`, `DownsampleConfiguration`, `Mapping` type alias.
-- `manager/utils.py` — Helpers: deterministic hashing for offset spreading, timedelta-to-Flux-duration conversion.
-- `manager/__init__.py` — Public API: exports `DownsampleManager`, `DownsampleConfiguration`, `BaseQueryGenerator`, `SourceQueryGenerator`, `ChainedQueryGenerator`.
+- `manager/model.py` — Data structures: `FieldData`, `LabelDef`, `DownsampleConfiguration`, `MeasurementConfig`, `SourceBucketConfig`, `Mapping` type alias.
+- `manager/utils.py` — Helpers: deterministic hashing for offset spreading, timedelta-to-Flux-duration conversion, field filtering with fnmatch patterns.
+- `manager/__init__.py` — Public API: exports `DownsampleManager`, `DownsampleConfiguration`, `MeasurementConfig`, `SourceBucketConfig`, `BaseQueryGenerator`, `SourceQueryGenerator`, `ChainedQueryGenerator`.
 
 ### Workflow
 1. Connect to InfluxDB (org/token/url)
@@ -32,6 +33,7 @@ Automated tool that creates and manages downsampling tasks for InfluxDB time-ser
 ## Dependencies
 - `influxdb-client` — InfluxDB Python SDK
 - `pytimeparse` — Parse duration strings (e.g. "1d", "15m")
+- `pyyaml` — YAML config file parsing
 - `coloredlogs` — Colored logging
 - `requests` — HTTP (transitive via influxdb-client)
 
@@ -43,4 +45,15 @@ Automated tool that creates and manages downsampling tasks for InfluxDB time-ser
 - Run tests: `pytest tests/ -v`
 
 ## Deployment
-- Docker: `python:3` base, installs deps, runs `python3 /app/main.py`
+- Docker image published to `ghcr.io/xyaren/influx-downsample-manager` via the tag-based Release workflow (#[[file:.github/workflows/release.yml]])
+- `python:3.14` base, installs deps, runs `python3 -m manager` with cron scheduling via entrypoint script
+- Pull with: `docker pull ghcr.io/xyaren/influx-downsample-manager:latest`
+
+## CI/CD
+- `.github/workflows/ci.yml` — Lint (ruff), unit tests, integration tests, and Docker build on push/PR to main
+- `.github/workflows/release.yml` — Tag-based (`v*`) Docker build and push to GHCR with semver tags
+
+## GitHub Config
+- `.github/ISSUE_TEMPLATE/bug_report.yml` — Structured bug report form
+- `.github/ISSUE_TEMPLATE/feature_request.yml` — Feature request form
+- `.github/dependabot.yml` — Weekly dependency updates for pip, Docker, and GitHub Actions
