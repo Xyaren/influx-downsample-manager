@@ -1,4 +1,6 @@
-.idea
-venv
-__pycache__
-config.yaml
+*
+!requirements.txt
+!manager/
+!manager/**
+!docker/
+!docker/**
