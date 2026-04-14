@@ -1,5 +1,8 @@
 import hashlib
 from datetime import timedelta
+from fnmatch import fnmatch
+
+from .model import FieldData, MeasurementConfig
 
 
 def hash_to_decimal(input_string: str, min_decimal: float, max_decimal: float) -> float:
@@ -48,3 +51,42 @@ def timedelta_to_flux_duration(td: timedelta) -> str:
 
     flux_duration = "".join(f"{value}{unit}" for value, unit in flux_duration_parts if value != 0)
     return flux_duration or "0s"
+
+
+def filter_fields(
+    fields: dict[str, FieldData],
+    measurement_config: MeasurementConfig | None,
+) -> dict[str, FieldData] | None:
+    """Apply measurement-level config to a field mapping.
+
+    Returns:
+    - ``None`` when the measurement is excluded (``include: false``).
+    - A (possibly filtered) dict of fields otherwise.
+
+    Field filtering rules:
+    - If *measurement_config* is ``None`` or empty, all fields pass through.
+    - ``include_fields`` patterns are evaluated first: only matching fields survive.
+    - ``exclude_fields`` patterns are applied second: matching fields are removed.
+    - Patterns use :func:`fnmatch.fnmatch` (``*``, ``?``, ``[seq]``).
+    """
+    if not measurement_config:
+        return fields
+
+    # Whole-measurement exclusion
+    if not measurement_config.get("include", True):
+        return None
+
+    include_patterns = measurement_config.get("include_fields")
+    exclude_patterns = measurement_config.get("exclude_fields")
+
+    result = fields
+
+    if include_patterns:
+        result = {name: data for name, data in result.items() if any(fnmatch(name, pat) for pat in include_patterns)}
+
+    if exclude_patterns:
+        result = {
+            name: data for name, data in result.items() if not any(fnmatch(name, pat) for pat in exclude_patterns)
+        }
+
+    return result

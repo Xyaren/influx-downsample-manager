@@ -25,4 +25,15 @@ class DownsampleConfiguration(TypedDict):
     chained: NotRequired[bool]
 
 
+class MeasurementConfig(TypedDict, total=False):
+    include: bool
+    include_fields: list[str]
+    exclude_fields: list[str]
+
+
+class SourceBucketConfig(TypedDict, total=False):
+    name: str
+    measurements: dict[str, MeasurementConfig]
+
+
 Mapping = dict[str, dict[str, FieldData]]

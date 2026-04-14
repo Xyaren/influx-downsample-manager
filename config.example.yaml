@@ -9,6 +9,27 @@ influxdb:
   token: ""
 
 # Source buckets to downsample
+#
+# Each entry is either a plain bucket name (string) or an object with:
+#   name           (required) — The source bucket name.
+#   measurements   (optional) — Per-measurement configuration.
+#     <measurement_name>:
+#       include: false              — Skip this measurement entirely.
+#       include_fields: ["pat*"]    — Only downsample matching fields (fnmatch wildcards).
+#       exclude_fields: ["pat*"]    — Remove matching fields (applied after include_fields).
+#     Omit a measurement to keep all its fields (default behaviour).
+#
+# Examples:
+#   source_buckets:
+#     - "simple_bucket"                       # plain string — all measurements
+#     - name: "telegraf/autogen"              # object form with measurement config
+#       measurements:
+#         procstat:
+#           include_fields: ["cpu_*", "memory_*"]
+#         kernel:
+#           include: false                    # skip entirely
+#         disk:
+#           exclude_fields: ["inodes_*"]
 source_buckets:
   - "telegraf/autogen"
   - "teamspeak"

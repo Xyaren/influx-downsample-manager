@@ -17,8 +17,9 @@ from influxdb_client.service.buckets_service import BucketsService
 from influxdb_client.service.tasks_service import TasksService
 from pytimeparse.timeparse import timeparse
 
-from .model import DownsampleConfiguration, FieldData, LabelDef, Mapping
+from .model import DownsampleConfiguration, FieldData, LabelDef, Mapping, MeasurementConfig
 from .query_generator import BaseQueryGenerator, ChainedQueryGenerator, SourceQueryGenerator
+from .utils import filter_fields
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +35,12 @@ class DownsampleManager:
         bucket_configs: dict[str, DownsampleConfiguration],
         url: str,
         metric_detection_duration: str = "1d",
+        measurement_configs: dict[str, dict[str, MeasurementConfig]] | None = None,
     ):
         self._metric_detection_duration = metric_detection_duration
         self._buckets = buckets
         self._bucket_configs = bucket_configs
+        self._measurement_configs = measurement_configs or {}
 
         self._task_prefix = "gen_"
 
@@ -271,6 +274,7 @@ class DownsampleManager:
 
             labels = [source_label, target_bucket_label, interval_label, label_downsampling]
             generators = self.create_tasks(
+                source_bucket,
                 effective_source,
                 downsample_bucket_name,
                 bucket_config,
@@ -288,6 +292,7 @@ class DownsampleManager:
     def create_tasks(
         self,
         source_bucket,
+        effective_source,
         target_bucket,
         downsample_config: DownsampleConfiguration,
         mapping,
@@ -299,9 +304,30 @@ class DownsampleManager:
         generators: list[BaseQueryGenerator] = []
         # Loop through each measurement and add it to the Flux query with the appropriate aggregation function
         for measurement, fields in mapping.items():
+            # Apply per-bucket, per-measurement config
+            bucket_measurements = self._measurement_configs.get(source_bucket)
+            measurement_config = bucket_measurements.get(measurement) if bucket_measurements else None
+            filtered_fields = filter_fields(fields, measurement_config)
+
+            if filtered_fields is None:
+                logger.info(
+                    "Skipping measurement %s in %s: excluded by config",
+                    measurement,
+                    target_bucket,
+                )
+                continue
+
+            if not filtered_fields:
+                logger.info(
+                    "Skipping measurement %s in %s: no fields remain after filtering",
+                    measurement,
+                    target_bucket,
+                )
+                continue
+
             generator_cls = ChainedQueryGenerator if chained else SourceQueryGenerator
             generator = generator_cls(
-                source_bucket, target_bucket, downsample_config, measurement, fields, self._task_prefix
+                source_bucket, target_bucket, downsample_config, measurement, filtered_fields, self._task_prefix
             )
             generators.append(generator)
 

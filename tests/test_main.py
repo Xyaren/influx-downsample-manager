@@ -1,6 +1,6 @@
 from unittest.mock import mock_open, patch
 
-from manager.__main__ import build_bucket_configs, load_config
+from manager.config import build_bucket_configs, load_config, parse_source_buckets
 
 SAMPLE_YAML = """
 influxdb:
@@ -71,3 +71,73 @@ class TestBuildBucketConfigs:
         assert "max_offset" not in cfg
         assert "expires" not in cfg
         assert "chained" not in cfg
+
+
+class TestParseSourceBuckets:
+    def test_plain_strings(self):
+        names, configs = parse_source_buckets(["telegraf", "teamspeak"])
+        assert names == ["telegraf", "teamspeak"]
+        assert configs == {}
+
+    def test_object_with_include_fields(self):
+        raw = [
+            {
+                "name": "telegraf/autogen",
+                "measurements": {
+                    "procstat": {"include_fields": ["cpu_*", "memory_*"]},
+                },
+            },
+        ]
+        names, configs = parse_source_buckets(raw)
+        assert names == ["telegraf/autogen"]
+        assert configs["telegraf/autogen"]["procstat"]["include_fields"] == ["cpu_*", "memory_*"]
+
+    def test_object_with_include_false(self):
+        raw = [
+            {
+                "name": "telegraf/autogen",
+                "measurements": {
+                    "kernel": {"include": False},
+                },
+            },
+        ]
+        _, configs = parse_source_buckets(raw)
+        assert configs["telegraf/autogen"]["kernel"]["include"] is False
+
+    def test_object_without_measurements(self):
+        raw = [{"name": "mybucket"}]
+        names, configs = parse_source_buckets(raw)
+        assert names == ["mybucket"]
+        assert configs == {}
+
+    def test_mixed_entries(self):
+        raw = [
+            "simple_bucket",
+            {
+                "name": "telegraf/autogen",
+                "measurements": {
+                    "procstat": {"include_fields": ["cpu_*"]},
+                    "disk": {"exclude_fields": ["inodes_*"]},
+                },
+            },
+            "another_bucket",
+        ]
+        names, configs = parse_source_buckets(raw)
+        assert names == ["simple_bucket", "telegraf/autogen", "another_bucket"]
+        assert "simple_bucket" not in configs
+        assert "another_bucket" not in configs
+        assert configs["telegraf/autogen"]["procstat"]["include_fields"] == ["cpu_*"]
+        assert configs["telegraf/autogen"]["disk"]["exclude_fields"] == ["inodes_*"]
+
+    def test_include_fields_and_exclude_fields(self):
+        raw = [
+            {
+                "name": "b",
+                "measurements": {
+                    "m": {"include_fields": ["a_*"], "exclude_fields": ["a_bad"]},
+                },
+            },
+        ]
+        _, configs = parse_source_buckets(raw)
+        assert configs["b"]["m"]["include_fields"] == ["a_*"]
+        assert configs["b"]["m"]["exclude_fields"] == ["a_bad"]
