@@ -122,6 +122,8 @@ Switching between `chained: true` and `chained: false` is safe at any time — n
 | Variable | Description |
 |---|---|
 | `INFLUXDB_TOKEN` | InfluxDB API token. Overrides the `token` field in `config.yaml`. |
+| `INFLUXDB_ORG` | InfluxDB organization name. Overrides the `org` field in `config.yaml`. |
+| `INFLUXDB_URL` | InfluxDB server URL. Overrides the `url` field in `config.yaml`. |
 | `CONFIG_PATH` | Path to the config file. Defaults to `config.yaml` in the working directory. |
 
 ## Usage
@@ -140,10 +142,41 @@ python main.py
 
 ```bash
 docker run --rm \
+  -e INFLUXDB_URL="https://influxdb.example.com" \
+  -e INFLUXDB_ORG="my-org" \
   -e INFLUXDB_TOKEN="your-token" \
   -v $(pwd)/config.yaml:/app/config.yaml \
   influx-downsample-manager
 ```
+
+### Docker Compose
+
+```yaml
+services:
+  manager:
+    build: https://github.com/Xyaren/influx-downsample-manager.git
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      - INFLUXDB_URL=${INFLUXDB_URL}
+      - INFLUXDB_ORG=${INFLUXDB_ORG}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+      - CRON_SCHEDULE=0 */6 * * *
+```
+
+```bash
+docker compose up --build
+```
+
+All three environment variables override their corresponding values in `config.yaml`, so you can keep secrets out of the config file.
+
+#### Docker environment variables
+
+| Variable | Description |
+|---|---|
+| `CRON_SCHEDULE` | Cron expression for periodic runs. Defaults to `0 */6 * * *` (every 6 hours). Set to empty or `false` to run once and exit. |
+
+The container runs the manager once at startup and then on the `CRON_SCHEDULE` via cron.
 
 ## How it works
 
