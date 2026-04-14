@@ -33,7 +33,7 @@ inclusion: always
 - Log operations at INFO level (created, updated, deleted resources)
 
 ## Git Commits
-- When committing changes, add Kiro as co-author using the trailer: `Co-authored-by: Kiro <kiro@amazon.com>`
+- Follow the conventions in the commit-conventions steering file (Conventional Commits format)
 
 ## Linting & Formatting
 - Linter/formatter: **ruff** (version pinned in #[[file:requirements-dev.txt]])
