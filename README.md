@@ -1,5 +1,10 @@
 # InfluxDB Downsampling Manager
 
+[![CI](https://github.com/Xyaren/influx-downsample-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Xyaren/influx-downsample-manager/actions/workflows/ci.yml)
+[![Release](https://github.com/Xyaren/influx-downsample-manager/actions/workflows/release.yml/badge.svg)](https://github.com/Xyaren/influx-downsample-manager/actions/workflows/release.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![GHCR](https://ghcr-badge.egpl.dev/xyaren/influx-downsample-manager/latest_tag?trim=major&label=ghcr.io)](https://github.com/Xyaren/influx-downsample-manager/pkgs/container/influx-downsample-manager)
+
 Automated tool that creates and manages downsampling tasks for InfluxDB. It discovers measurements and fields in your source buckets, creates downsampled copies at configurable intervals and retention periods, and generates Flux query tasks with intelligent offset scheduling to avoid thundering-herd problems.
 
 ## Features
@@ -41,6 +46,10 @@ pip install -r requirements.txt
 ### Docker
 
 ```bash
+# Pull the pre-built image from GitHub Container Registry
+docker pull ghcr.io/xyaren/influx-downsample-manager:latest
+
+# Or build locally
 docker build -t influx-downsample-manager .
 ```
 
@@ -146,7 +155,7 @@ docker run --rm \
   -e INFLUXDB_ORG="my-org" \
   -e INFLUXDB_TOKEN="your-token" \
   -v $(pwd)/config.yaml:/app/config.yaml \
-  influx-downsample-manager
+  ghcr.io/xyaren/influx-downsample-manager:latest
 ```
 
 ### Docker Compose
@@ -154,7 +163,7 @@ docker run --rm \
 ```yaml
 services:
   manager:
-    build: https://github.com/Xyaren/influx-downsample-manager.git
+    image: ghcr.io/xyaren/influx-downsample-manager:latest
     volumes:
       - ./config.yaml:/app/config.yaml:ro
     environment:
