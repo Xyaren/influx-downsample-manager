@@ -9,7 +9,7 @@ import coloredlogs
 from .config import build_bucket_configs, load_config, parse_source_buckets
 from .downsample_manager import DownsampleManager
 
-coloredlogs.install(stream=sys.stdout)
+coloredlogs.install(stream=sys.stdout, fmt="%(asctime)s %(levelname)s %(message)s", datefmt="%Y-%m-%dT%H:%M:%S%z")
 
 logger = logging.getLogger(__name__)
 
