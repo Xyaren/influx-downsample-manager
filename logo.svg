@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+  <defs>
+    <linearGradient id="coarse" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#22d3ee"/>
+      <stop offset="100%" style="stop-color:#6366f1"/>
+    </linearGradient>
+    <linearGradient id="area" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:0.18"/>
+      <stop offset="100%" style="stop-color:#6366f1;stop-opacity:0"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Raw data line (noisy, semi-transparent) -->
+  <polyline
+    points="24,155 48,132 64,144 86,110 106,124 130,90 152,104 174,74 196,86 218,58 240,72 262,46 284,58 300,38"
+    fill="none"
+    stroke="#818cf8"
+    stroke-width="2.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    opacity="0.3"
+  />
+
+  <!-- Filled area under downsampled line -->
+  <polygon
+    points="24,155 110,112 200,72 300,38 300,180 24,180"
+    fill="url(#area)"
+  />
+
+  <!-- Downsampled line -->
+  <polyline
+    points="24,155 110,112 200,72 300,38"
+    fill="none"
+    stroke="url(#coarse)"
+    stroke-width="4.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    filter="url(#glow)"
+  />
+
+  <!-- Downsampled dots -->
+  <g filter="url(#glow)">
+    <circle cx="24"  cy="155" r="7" fill="#22d3ee"/>
+    <circle cx="110" cy="112" r="7" fill="#4d94f0"/>
+    <circle cx="200" cy="72"  r="7" fill="#7c6ef5"/>
+    <circle cx="300" cy="38"  r="7" fill="#6366f1"/>
+  </g>
+</svg>

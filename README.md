@@ -1,3 +1,5 @@
+<img align="right" src="logo.svg" width="240" alt="Downsample Manager logo"/>
+
 # InfluxDB Downsampling Manager
 
 [![CI](https://github.com/Xyaren/influx-downsample-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Xyaren/influx-downsample-manager/actions/workflows/ci.yml)
