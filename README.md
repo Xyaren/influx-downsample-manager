@@ -8,6 +8,18 @@
 
 Automated tool that creates and manages downsampling tasks for InfluxDB. It discovers measurements and fields in your source buckets, creates downsampled copies at configurable intervals and retention periods, and generates Flux query tasks with intelligent offset scheduling to avoid thundering-herd problems.
 
+## Why downsampling?
+
+Time-series databases like InfluxDB collect data at high frequency — often every few seconds. Over weeks and months this adds up to billions of data points, which slows down queries and increases storage costs. Most of the time, you don't need second-level precision when looking at last month's data.
+
+Downsampling solves this by pre-aggregating raw data into coarser intervals (e.g. 1-minute, 10-minute, 1-hour averages) and storing the results in separate buckets with their own retention policies. Dashboards query the appropriate tier based on the time range — recent data stays detailed, older data stays fast and compact.
+
+This tool automates the entire process: it discovers your measurements, creates the target buckets, generates the aggregation tasks, and keeps everything in sync as your schema evolves.
+
+## Compatibility
+
+This tool is compatible with **InfluxDB 2.x only**. It relies on the Flux query language and the InfluxDB 2.x task API, which are not available in InfluxDB 1.x or InfluxDB 3.x.
+
 ## Features
 
 - Automatic measurement and field-type detection from source buckets
