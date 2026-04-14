@@ -10,7 +10,7 @@ from .model import DownsampleConfiguration, MeasurementConfig
 def load_config(path: str = "config.yaml") -> dict:
     config_path = os.environ.get("CONFIG_PATH", path)
     with open(config_path) as f:
-        return yaml.safe_load(f)
+        return yaml.safe_load(f) or {}
 
 
 def build_bucket_configs(raw: dict[str, dict]) -> dict[str, DownsampleConfiguration]:
