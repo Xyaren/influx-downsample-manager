@@ -1,9 +1,15 @@
 venv/
 __pycache__/
-*.pyc
 .idea/
+.vscode/
+*.iml
+.eclipse/
+.project
+.classpath
+.settings/
 
 # Never commit real config with tokens
 config.yaml
 !config.example.yaml
+
 .kiro/settings/mcp.json

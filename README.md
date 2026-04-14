@@ -196,8 +196,9 @@ All three environment variables override their corresponding values in `config.y
 | Variable | Description |
 |---|---|
 | `CRON_SCHEDULE` | Cron expression for periodic runs. Defaults to `0 */6 * * *` (every 6 hours). Set to empty or `false` to run once and exit. |
+| `RUN_ON_STARTUP` | Run the manager immediately on container start. Defaults to `true`. Set to `false` to skip the initial run and only rely on the cron schedule. |
 
-The container runs the manager once at startup and then on the `CRON_SCHEDULE` via cron.
+The container runs the manager once at startup (unless `RUN_ON_STARTUP=false`) and then on the `CRON_SCHEDULE` via cron.
 
 ## How it works
 
