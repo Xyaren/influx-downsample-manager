@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def main() -> None:
     config = load_config()
 
-    influx_cfg = config["influxdb"]
+    influx_cfg = config.get("influxdb") or {}
     token = os.environ.get("INFLUXDB_TOKEN", influx_cfg.get("token", ""))
     org = os.environ.get("INFLUXDB_ORG", influx_cfg.get("org", ""))
     url = os.environ.get("INFLUXDB_URL", influx_cfg.get("url", ""))
