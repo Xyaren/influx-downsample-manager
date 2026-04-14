@@ -4,7 +4,10 @@
 [![CI](https://github.com/Xyaren/influx-downsample-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Xyaren/influx-downsample-manager/actions/workflows/ci.yml)
 [![Release](https://github.com/Xyaren/influx-downsample-manager/actions/workflows/release.yml/badge.svg)](https://github.com/Xyaren/influx-downsample-manager/actions/workflows/release.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![GHCR](https://ghcr-badge.egpl.dev/xyaren/influx-downsample-manager/latest_tag?trim=major&label=ghcr.io)](https://github.com/Xyaren/influx-downsample-manager/pkgs/container/influx-downsample-manager)
+[![GHCR](https://img.shields.io/github/v/release/Xyaren/influx-downsample-manager?label=ghcr.io&logo=docker&sort=semver)](https://github.com/Xyaren/influx-downsample-manager/pkgs/container/influx-downsample-manager)
+[![Python 3.14+](https://img.shields.io/badge/python-3.14+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![GitHub last commit](https://img.shields.io/github/last-commit/Xyaren/influx-downsample-manager)](https://github.com/Xyaren/influx-downsample-manager/commits/main)
+[![GitHub issues](https://img.shields.io/github/issues/Xyaren/influx-downsample-manager)](https://github.com/Xyaren/influx-downsample-manager/issues)
 
 Automated tool that creates and manages downsampling tasks for InfluxDB. It discovers measurements and fields in your source buckets, creates downsampled copies at configurable intervals and retention periods, and generates Flux query tasks with intelligent offset scheduling to avoid thundering-herd problems.
 
