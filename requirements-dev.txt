@@ -1,4 +1,4 @@
 -r requirements.txt
 pytest==9.0.3
-ruff==0.15.14
+ruff==0.15.16
 testcontainers==4.14.2
